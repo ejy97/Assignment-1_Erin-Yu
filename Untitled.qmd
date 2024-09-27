@@ -1,0 +1,9 @@
+---
+title: "Assignment 1"
+author: "Erin Yu"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Assignment 1

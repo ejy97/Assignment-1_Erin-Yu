@@ -1,0 +1,160 @@
+---
+title: "Assignment 1"
+author: "Erin Yu"
+format: html
+editor: visual
+embed-resources: true
+---
+
+## Assignment 1
+
+Primary question: whether **daily concentrations of PM 2.5** have **decreased** in California over the last 20 years
+
+#Check the dimensions, headers, footers, variable names, and variable types
+
+```{r}
+library(data.table)
+
+data_2002 <- fread("/Users/erinyu/Desktop/USC/MPH/Fall 2024/Health Data (PM 566)/PM566labs/2002_PM2.5.csv")
+data_2022 <- fread("/Users/erinyu/Desktop/USC/MPH/Fall 2024/Health Data (PM 566)/PM566labs/2022_PM2.5.csv")
+
+dim(data_2002)
+dim(data_2022)
+str(data_2002)
+str(data_2022)
+sum(is.na(data_2002$`Daily Mean PM2.5 Concentration`))
+sum(is.na(data_2022$`Daily Mean PM2.5 Concentration`))
+```
+
+There are 22 variables in both datasets. There are 15,976 observations in 2002 and 59,756 observations in 2022. Variables include date, source, site ID (integer), POC (integer), daily mean PM2.5 concentrations, units, daily AQI value, local site name, daily obs count, percent complete, AQS parameter code, site longitude and latitude, county, method code, etc. There were no missing data for the main variable interest, daily mean PM2.5 concentration for both datasets. The daily mean PM2.5 concentration is a numerical variable.
+
+#Create Date Variable
+
+```{r}
+data_2002[, Year := 2002]
+data_2022[, Year := 2022]
+```
+
+#Combine the dataset
+
+```{r}
+combined_data <- rbind(data_2002, data_2022)
+```
+
+#Rename Variables
+
+```{r}
+library(dplyr)
+library(tidyverse)
+
+combined_data <- combined_data %>% rename(Lat = `Site Latitude`, Long = `Site Longitude`)
+data_2002 <- data_2002 %>% rename(Lat = `Site Latitude`, Long = `Site Longitude`)
+data_2022 <- data_2022 %>% rename(Lat = `Site Latitude`, Long = `Site Longitude`)
+
+```
+
+#Create Leaflet Map
+
+```{r}
+
+data_2002 <- combined_data[combined_data$Year == 2002, ]
+data_2022 <- combined_data[combined_data$Year == 2022, ]
+
+library(leaflet)
+
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(data = data_2002,
+                   lng = ~Long, lat = ~Lat,
+                   color = "blue", fillOpacity = 0.7, radius = 2,
+                   label = "2002 Site: ", 
+                   group = "2002 Sites") %>%
+   addCircleMarkers(data = data_2022,
+                   lng = ~Long, lat = ~Lat,
+                   color = "red", fillOpacity = 0.7, radius = 2,
+                   label = "2022 Site: ",
+                   group = "2022 Sites") %>%
+  addLayersControl(
+    overlayGroups = c("2002 Sites", "2022 Sites"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+```
+
+The monitoring sites are scattered throughout north and south, with a lot of them toward the coast. It seems the number of sites in 2022 (red) have increased since 2002 (blue)
+
+#Check for missing values
+
+```{r}
+missing_values <- combined_data[is.na('PM2.5')]
+dim(missing_values)
+implausible_values <- combined_data['PM2.5' < 0]
+dim(implausible_values)
+
+
+implausible_summary <- combined_data['PM2.5' < 0, .(Implausible_Count = .N), by = Year]
+
+print(implausible_summary)
+
+```
+
+There are 0 missing values of mean PM 2.5 measurements for both 2002 and 2022. There were, however, 215 implausible values for PM 2.5, which were all from 2022.
+
+#Explore the main question by state
+
+```{r}
+library(ggplot2)
+colnames(combined_data)
+ggplot(combined_data, aes(x = factor(Year), y = `Daily Mean PM2.5 Concentration`)) +
+  geom_boxplot() +
+  labs(title = "PM2.5 Concentrations in California (2002 vs 2022)", x = "Year", y = "PM2.5")
+
+```
+
+Compared to 2002, the range of PM 2.5 values in 2022 were higher, with the highest readings up to 300, and some readings in the negative range. The highest value in 2002 was recorded at around 100. It seems that over the years the variability of PM 2.5 concentrations has increased.
+
+#Explore the question by county
+
+```{r}
+county_summary <- combined_data[, .(Mean_PM2.5 = mean(`Daily Mean PM2.5 Concentration`, na.rm = TRUE),
+                                     Count = .N), 
+                                 by = .(County, Year)]
+library(ggplot2)
+library(data.table)
+
+setDT(combined_data)
+
+
+ggplot(county_summary, aes(x = Year, y = Mean_PM2.5, color = County)) +
+  geom_line() +
+  labs(title = "Mean PM2.5 Concentrations by County (2002 - 2022)",
+       x = "Year",
+       y = "Mean PM2.5",
+       color = "County") +
+  theme_minimal()
+
+```
+
+It seems that the mean PM2.5 concentrations have decreased from 2002 to 2022 in nearly all the counties except a few counties, presumably Ventura, Shasta, and Los Angeles. The mean county PM 2.5 started at around 2.5 in 2002, and increased to 10, 7.5, and 5, respectively.
+
+#Explore the question by site level
+
+
+```{r}
+
+library(ggplot2)
+
+# Create a histogram of PM2.5 levels, filled by site, faceted by Year
+ggplot(combined_data, aes(x = `Daily Mean PM2.5 Concentration`, fill = `Site ID`)) +
+  geom_histogram(binwidth = 1, alpha = 0.7, position = "identity") +
+  labs(title = "PM2.5 Levels by Site and Year",
+       x = "PM2.5 Levels",
+       y = "Count",
+       fill = "Site ID") +
+  facet_wrap(~Year) +  # Facet by year to create separate plots for each year
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+```
+
+Compared to 2002, there was a greater frequency of individual sites recording mean PM2.5 levels in 2022, with roughly 5500 sites recording a mean of 25 PM2.5 level, compared to less than 1000 sites recording a mean of 10 PM2.5 level
